@@ -1,0 +1,706 @@
+---
+title: "Austin Crime Analyis Markdown File"
+author: "Rudy Duran"
+date: "10/10/2020"
+output: html_document
+---
+
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Loading the libraries
+
+
+```{r}
+library(tidyverse)
+library(caret)
+library(car)
+library(ggplot2)
+library(lubridate)
+library(tree)
+library(ggmap)
+library(RColorBrewer)
+library(randomForest)
+library(sp)
+library(expss)
+library(corrplot)
+```
+
+
+
+# Loading the datasets
+```{r}
+austin_crime<- read.csv("C:\\Users\\duran\\Desktop\\Data Analytics Applications\\Final Project\\Austin Crime Dataset.csv")
+```
+
+
+# Checking the datatypes
+```{r}
+str(austin_crime)
+```
+
+
+
+# Getting rid of missing values
+```{r}
+austin_crimedata <- austin_crime
+summary(austin_crimedata)
+sum(is.na(austin_crimedata))
+cleandata <- na.omit(austin_crimedata)
+```
+
+
+
+# Checking NAs are not there
+```{r}
+sum(is.na(cleandata))
+```
+# Getting rid of '' in the data
+```{r}
+cleandata = subset(cleandata, cleandata$Highest.Offense.Description != '')
+cleandata = subset(cleandata, cleandata$Family.Violence != '')
+cleandata = subset(cleandata, cleandata$Clearance.Status != '')
+cleandata = subset(cleandata, cleandata$Occurred.Date.Time != '')
+cleandata = subset(cleandata, cleandata$Occurred.Date != '')
+cleandata = subset(cleandata, cleandata$Report.Date.Time != '')
+cleandata = subset(cleandata, cleandata$Report.Date != '')
+cleandata = subset(cleandata, cleandata$Location.Type != '')
+cleandata = subset(cleandata, cleandata$Address != '')
+cleandata = subset(cleandata, cleandata$APD.Sector != '')
+cleandata = subset(cleandata, cleandata$APD.District != '')
+cleandata = subset(cleandata, cleandata$PRA != '')
+cleandata = subset(cleandata, cleandata$Clearance.Date != '')
+cleandata = subset(cleandata, cleandata$UCR.Category != '')
+cleandata = subset(cleandata, cleandata$Category.Description != '')
+cleandata = subset(cleandata, cleandata$Location != '')
+```
+
+
+# Making a date out of Occurred.Date
+
+```{r}
+cleandata <- cleandata %>%
+            mutate(Occurred_New_Date = mdy(Occurred.Date))
+```
+
+
+
+# Making a date out of Report.Date
+```{r}
+cleandata <- cleandata %>%
+            mutate(Report_New_Date = mdy(Report.Date))
+```
+
+
+
+
+# Making a date out of Clearance Date
+```{r}
+cleandata <- cleandata %>%
+            mutate(Clearance_New_Date = mdy(Clearance.Date))
+```
+
+
+# Getting year and month from occurred date
+
+
+```{r}
+cleandata <- cleandata %>%
+            mutate(Occurred_Year = year(Occurred_New_Date),
+                  Occurred_Month = month(Occurred_New_Date))
+```
+
+
+
+# Transforming Occurred.Date.Time column into a timestamp
+
+```{r}
+cleandata <- cleandata %>%
+             mutate(Occurred_Time = mdy_hms(Occurred.Date.Time))
+```
+
+
+
+# Transforming Report.Date.Time into a timestamp\
+```{r}
+cleandata <- cleandata %>%
+             mutate(Report_Time = mdy_hms(Report.Date.Time))
+```
+
+
+# Extracting the necessary time elements from Report_Time
+```{r}
+cleandata <- cleandata %>% mutate(Report_Year = year(Report_Time), 
+                    Report_Month = month(Report_Time, label = TRUE), 
+                    Report_Day = wday(Report_Time, label = TRUE))
+```
+
+
+# Extracting the necessary time elements from Occurred_Time
+```{r}
+cleandata <- cleandata %>% mutate(Occurred_Year = year(Occurred_Time), 
+                    Occurred_Month = month(Occurred_Time, label = TRUE
+                                           ), 
+                    Occurred_Day = wday(Occurred_Time, label = TRUE))
+```
+
+
+# Subsetting the data for a specific timeframe
+
+```{r}
+cleandata <- subset(cleandata, Occurred_Year >= 2015)
+```
+
+
+
+# Factoring variables
+```{r}
+cleandata$Highest.Offense.Description <- as.factor(cleandata$Highest.Offense.Description)
+cleandata$Family.Violence <- as.factor(cleandata$Family.Violence)
+cleandata$APD.Sector <- as.factor(cleandata$APD.Sector)
+cleandata$APD.District <- as.factor(cleandata$APD.District)
+cleandata$PRA <- as.factor(cleandata$PRA)
+cleandata$Location.Type <- as.factor(cleandata$Location.Type)
+cleandata$Clearance.Status <- as.factor(cleandata$Clearance.Status)
+cleandata$UCR.Category <- as.factor(cleandata$UCR.Category)
+cleandata$Category.Description <- as.factor(cleandata$Category.Description)
+cleandata$Zip.Code <- as.factor(cleandata$Zip.Code)
+```
+
+
+
+# Eliminating variables that are not needed
+
+```{r}
+cleandata = subset(cleandata, select = -c(Occurred.Date.Time, Occurred.Date, Occurred.Time, Report.Date.Time,
+                                          Report.Date, Report.Time, Address,Location, Clearance.Date, 
+                                           PRA, X.coordinate, Y.coordinate, Council.District, APD.Sector, APD.District,
+                                          Census.Tract, UCR.Category ) )
+```
+
+
+
+
+
+# Making dummy day variables
+
+
+```{r}
+
+cleandata$dummymonday = ifelse(cleandata$Occurred_Day == "Mon", 1, 0)
+cleandata$dummytuesday = ifelse(cleandata$Occurred_Day == "Tue", 1, 0)
+cleandata$dummywednesday= ifelse(cleandata$Occurred_Day == "Wed", 1, 0)
+cleandata$dummythursday = ifelse(cleandata$Occurred_Day == "Thu", 1, 0)
+cleandata$dummyfriday = ifelse(cleandata$Occurred_Day == "Fri", 1, 0)
+cleandata$dummysaturday = ifelse(cleandata$Occurred_Day == "Sat", 1, 0)
+```
+
+
+# Making Monthly dummy variables
+```{r}
+cleandata$dummyJanuary = ifelse(cleandata$Occurred_Month== "Jan", 1, 0)
+cleandata$dummyFebruary = ifelse(cleandata$Occurred_Month == "Feb", 1, 0)
+cleandata$dummyMarch= ifelse(cleandata$Occurred_Month == "Mar", 1, 0)
+cleandata$dummyApril = ifelse(cleandata$Occurred_Month == "Apr", 1, 0)
+cleandata$dummyMay = ifelse(cleandata$Occurred_Month == "May", 1, 0)
+cleandata$dummyJune = ifelse(cleandata$Occurred_Month == "Jun", 1, 0)
+cleandata$dummyJuly = ifelse(cleandata$Occurred_Month == "Jul", 1, 0)
+cleandata$dummyAugust = ifelse(cleandata$Occurred_Month == "Aug", 1, 0)
+cleandata$dummySeptember= ifelse(cleandata$Occurred_Month == "Sep", 1, 0)
+cleandata$dummyOctober = ifelse(cleandata$Occurred_Month == "Oct", 1, 0)
+cleandata$dummyNovember = ifelse(cleandata$Occurred_Month == "Nov", 1, 0)
+```
+
+
+# Checking last time on new dataset
+
+```{r}
+str(cleandata)
+```
+
+
+# Train/Test Splitting the data
+```{r}
+set.seed(1)
+inTrain <- createDataPartition(cleandata$Family.Violence, p = 0.7, list = FALSE)
+cleandata_train <- cleandata[inTrain,]
+cleandata_test <- cleandata[-inTrain,]
+```
+
+
+
+
+
+
+# Logistic Regression
+```{r}
+model2 <- glm(Family.Violence~ Location.Type + dummymonday + dummytuesday + dummywednesday + dummythursday + dummyfriday + dummyJune  + dummyNovember , data = cleandata_train, family = "binomial")
+summary(model2)
+```
+
+
+
+
+
+```{r}
+# Running probabilities
+cleandata_test$PredProb = predict.glm(model2, newdata = cleandata_test, type = 'response')
+cleandata_test$PredChoice = ifelse(cleandata_test$PredProb >= 0.07, 1, 0)
+cleandata_test$PredChoice = ifelse(cleandata_test$PredChoice == 1,'Y','N')
+caret::confusionMatrix(as.factor(cleandata_test$Family.Violence), as.factor(cleandata_test$PredChoice))
+```
+
+
+# Random Forest on everything
+
+
+
+```{r}
+set.seed(1)
+rf.training = randomForest(Family.Violence~., data = cleandata_train, importance = TRUE, ntree = 100)
+```
+
+
+
+# Checking variable importance plot
+```{r}
+varImpPlot(rf.training)
+```
+
+
+
+
+
+# Running Random Forest on specific variables
+
+```{r}
+set.seed(1)
+rf.training = randomForest(Family.Violence~Location.Type + dummymonday + dummytuesday + dummywednesday + dummythursday + dummyfriday + dummyJune  + dummyNovember, data = cleandata_train, importance = TRUE, ntree = 100)
+```
+
+# Testing predictions on test dataset
+
+```{r}
+rf.pred = predict(rf.training, cleandata_test)
+caret::confusionMatrix(rf.pred, cleandata_test$Family.Violence)
+```
+
+# Line Graphs- Question 2
+
+Subsetting Data
+
+
+
+```{r}
+cleandata_occurred2017theft <- subset(cleandata, Occurred_Year == 2017 & Category.Description == "Theft")
+cleandata_occurred2017murder <- subset(cleandata, Occurred_Year == 2017 & Category.Description == "Murder")
+cleandata_occurred2017robbery <- subset(cleandata, Occurred_Year == 2017 & Category.Description == "Robbery")
+cleandata_occurred2017burglary <- subset(cleandata, Occurred_Year == 2017 & Category.Description == "Burglary")
+cleandata_occurred2017autotheft <- subset(cleandata, Occurred_Year == 2017 & Category.Description == "Auto Theft")
+cleandata_occurred2017aggrassault <- subset(cleandata, Occurred_Year == 2017 & Category.Description == "Aggravated Assault")
+```
+
+
+
+# Running line plot on theft
+```{r}
+cleandata_occurred2017theft %>%
+ggplot(aes(Occurred_Time)) +
+  geom_freqpoly(binwidth = 86400) + 
+  labs(title = "Austin Theft Occurrences- 2017",
+                          x = NULL,
+                          y = 'Number of Occurrences') + 
+  theme_classic() +
+    theme(legend.position = "none") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+# Running line plot on murder
+```{r}
+cleandata_occurred2017murder %>%
+ggplot(aes(Occurred_Time)) +
+  geom_freqpoly(binwidth = 86400) + 
+  labs(title = "Austin Murder Occurrences- 2017",
+                          x = NULL,
+                          y = 'Number of Occurrences') + 
+  theme_classic() +
+    theme(legend.position = "none") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+
+# Running line plot on robbery
+```{r}
+cleandata_occurred2017robbery %>%
+ggplot(aes(Occurred_Time)) +
+  geom_freqpoly(binwidth = 86400) + 
+  labs(title = "Austin Robbery Occurrences- 2017",
+                          x = NULL,
+                          y = 'Number of Occurrences') + 
+  theme_classic() +
+    theme(legend.position = "none") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+# Running line plot on burglary
+
+```{r}
+cleandata_occurred2017burglary %>%
+ggplot(aes(Occurred_Time)) +
+  geom_freqpoly(binwidth = 86400) + 
+  labs(title = "Austin Burglary Occurrences- 2017",
+                          x = NULL,
+                          y = 'Number of Occurrences') + 
+  theme_classic() +
+    theme(legend.position = "none") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+# Running line plot on auto theft
+```{r}
+cleandata_occurred2017autotheft %>%
+ggplot(aes(Occurred_Time)) +
+  geom_freqpoly(binwidth = 86400) + 
+  labs(title = "Austin Auto Theft Occurrences- 2017",
+                          x = NULL,
+                          y = 'Number of Occurrences') + 
+  theme_classic() +
+    theme(legend.position = "none") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+# Running line plot on aggravated assault
+```{r}
+cleandata_occurred2017aggrassault %>%
+ggplot(aes(Occurred_Time)) +
+  geom_freqpoly(binwidth = 86400) + 
+  labs(title = "Austin Aggravated Assault Occurrences- 2017",
+                          x = NULL,
+                          y = 'Number of Occurrences') + 
+  theme_classic() +
+    theme(legend.position = "none") +
+  theme(plot.title = element_text(hjust = 0.5))
+```
+
+
+
+
+
+# Getting the count for category descriptions
+```{r}
+Offense_count <- cleandata %>% 
+              group_by(Highest.Offense.Description) %>% 
+              summarize(count = n()) %>% 
+              arrange(count)
+print(Offense_count)
+```
+
+# Getting the top 10 offenses
+```{r}
+Top_10_Offense <- Offense_count %>%
+                     top_n(10, count) %>%
+                  arrange(desc(count))
+print(Top_10_Offense)
+```
+
+
+
+# Getting the top 10 percentages
+```{r}
+Top_10_Offense <- Top_10_Offense %>%
+                     mutate(pct = count/ sum(count))
+print(Top_10_Offense)
+```
+
+
+# Getting Bottom 10
+
+
+```{r}
+Bottom_10_Offense <- Offense_count %>%
+                     top_n(-10, count) %>%
+                    arrange(desc(count)) %>%
+                    mutate(pct = count/sum(count))
+
+print(Bottom_10_Offense)
+```
+
+
+# Top 10 Offenses 2015-2019 Bar Graph
+
+```{r}
+ggplot(Top_10_Offense) + 
+      geom_bar(mapping = aes(x = reorder(Highest.Offense.Description,+pct),y = pct, fill = Highest.Offense.Description), stat = 'identity') +
+      coord_flip() + 
+      labs(title = "Top 10 Austin Reported Incidents 2015-2019",
+                          x = NULL,
+                          y = NULL) + 
+  theme_classic() +
+    theme(legend.position = "none")+
+  scale_y_continuous(labels = scales::percent_format())
+```
+
+# Bottom 10 Offenses 2015-2019 Bar Graph
+
+
+```{r}
+ggplot(Bottom_10_Offense) + 
+      geom_bar(mapping = aes(x = reorder(Highest.Offense.Description,+pct),y = pct,fill = Highest.Offense.Description),   stat = 'identity') +
+      coord_flip() + labs(title = "Bottom 10 Austin Reported Incidents 2015-2019",
+                          x = NULL,
+                          y = NULL) + 
+  theme_classic() +
+  theme(legend.position = "none") +
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1))
+```
+
+# Getting counts for locations
+```{r}
+Location_count <- cleandata %>% 
+              group_by(Location.Type) %>% 
+              summarize(count = n()) %>% 
+              arrange(count)
+print(Location_count)
+```
+
+# Getting counts for zip codes
+```{r}
+zip_count <- cleandata %>% 
+              group_by(Zip.Code) %>% 
+              summarize(count = n()) %>% 
+              arrange(count)
+print(zip_count)
+```
+
+
+# Getting percentages for zip codes
+```{r}
+zip_count <- zip_count%>%
+                     mutate(pct = count/ sum(count))
+print(zip_count)
+```
+
+
+# Austin Incidents Zip Code
+
+Note: Could not recreate bar graph where all the bars were a specific type of blue as shown in the paper and presentation. 
+
+```{r}
+ggplot(zip_count) + 
+      geom_bar(mapping = aes(x = reorder(Zip.Code,+count),y = count, fill = Zip.Code), stat = 'identity') +
+      coord_flip() + 
+      labs(title = "Incidents by Zip Code 2015-2019",
+                        x = NULL,
+                        y = NULL) +
+      theme_classic() + 
+  theme(plot.title = element_text(hjust = 0.5)) +
+  theme(legend.position = "none") 
+  
+```
+
+
+
+# Getting the top 10 Locations
+```{r}
+Top_10_Locations <- Location_count %>%
+                     top_n(10, count) %>%
+                  arrange(desc(count))
+print(Top_10_Locations)
+```
+
+
+
+
+
+
+# Getting the top 10 percentages
+```{r}
+Top_10_Locations <- Top_10_Locations%>%
+                     mutate(pct = count/ sum(count))
+print(Top_10_Locations)
+```
+
+
+# Getting Lowest Locations
+```{r}
+Bottom_10_Locations <- Location_count %>%
+                     top_n(-10, count) %>%
+                    arrange(desc(count)) %>%
+                    mutate(pct = count/sum(count))
+
+print(Bottom_10_Locations)
+```
+
+# Top 10 Locations Bar Graphs For Crime
+
+```{r}
+ggplot(Top_10_Locations) + 
+      geom_bar(mapping = aes(x = reorder(Location.Type,+pct),y = pct, fill = Location.Type), stat = 'identity') +
+      coord_flip() + 
+      labs(title = "Top 10 Locations By Incident 2015-2019",
+                          x = NULL,
+                          y = NULL) + 
+  theme_classic() +
+    theme(legend.position = "none")+
+  scale_y_continuous(labels = scales::percent_format(accuracy = 1))
+```
+
+
+
+
+# Generating maps by crime- Registering Google key
+
+```{r}
+register_google(key = 'AIzaSyCwMV07Bb4MKO2fdUaVbJzIAXH_r5kyoq4')
+```
+
+
+
+# Subsetting for crime data for theft for 2018
+
+
+```{r}
+crimedatatheft <- cleandata
+```
+
+
+```{r}
+crimedatatheft2018 <- cleandata %>%
+                      filter(Occurred_Year == 2018,
+                             Category.Description == 'Theft')
+```
+
+# Subsetting for crime data for theft for 2017
+
+```{r}
+crimedatatheft2017 <- cleandata %>%
+                      filter(Occurred_Year == 2017,
+                             Category.Description == 'Theft')
+```
+
+# Subsetting for crime data for theft for 2016
+
+```{r}
+crimedatatheft2016 <- cleandata %>%
+                      filter(Occurred_Year == 2016,
+                             Category.Description == 'Theft')
+```
+
+
+# # Subsetting for crime data for theft for 2015
+
+
+```{r}
+crimedatatheft2015 <- cleandata %>%
+                      filter(Occurred_Year == 2015,
+                             Category.Description == 'Theft')
+```
+
+
+
+# Making the coordinates for the maps
+
+
+```{r}
+coords <- cbind(Longitude = as.numeric(as.character(crimedatatheft$Longitude)), Latitude = as.numeric(as.character(crimedatatheft$Latitude)))
+crime.pts <- SpatialPointsDataFrame(coords, crimedatatheft[, -(5:6)], proj4string = CRS("+init=epsg:4326"))
+```
+
+
+```{r}
+coords <- cbind(Longitude = as.numeric(as.character(crimedatatheft2018$Longitude)), Latitude = as.numeric(as.character(crimedatatheft2018$Latitude)))
+crime.pts <- SpatialPointsDataFrame(coords, crimedatatheft2018[, -(5:6)], proj4string = CRS("+init=epsg:4326"))
+```
+
+
+
+```{r}
+coords <- cbind(Longitude = as.numeric(as.character(crimedatatheft2017$Longitude)), Latitude = as.numeric(as.character(crimedatatheft2017$Latitude)))
+crime.pts <- SpatialPointsDataFrame(coords, crimedatatheft2017[, -(5:6)], proj4string = CRS("+init=epsg:4326"))
+```
+
+```{r}
+coords <- cbind(Longitude = as.numeric(as.character(crimedatatheft2016$Longitude)), Latitude = as.numeric(as.character(crimedatatheft2016$Latitude)))
+crime.pts <- SpatialPointsDataFrame(coords, crimedatatheft2016[, -(5:6)], proj4string = CRS("+init=epsg:4326"))
+```
+
+```{r}
+coords <- cbind(Longitude = as.numeric(as.character(crimedatatheft2015$Longitude)), Latitude = as.numeric(as.character(crimedatatheft2015$Latitude)))
+crime.pts <- SpatialPointsDataFrame(coords, crimedatatheft2015[, -(5:6)], proj4string = CRS("+init=epsg:4326"))
+```
+
+# Renaming Category.Description to Category
+
+```{r}
+names(crimedatatheft)[names(crimedatatheft) == 'Category.Description'] <- 'Category'
+```
+
+
+# Making geospatial maps
+
+```{r}
+#plot the  hybrid Google Maps basemap
+map <- qmap('Austin', zoom =13, maptype = 'hybrid')
+#plot the crime points on top
+map + geom_point(data = crimedatatheft, aes(colour = Category,x = Longitude, y = Latitude), size=2, alpha=0.18
+                 ) +
+   labs(title = "Austin Crime - All Types (2015-2019)") + 
+          theme(plot.title = element_text(hjust = 0.5)) +
+  facet_wrap(~ Occurred_Year, ncol = 3)
+  
+```
+
+
+```{r}
+#plot the  hybrid Google Maps basemap
+map <- qmap('Austin', zoom = 12, maptype = 'hybrid')
+#plot the crime points on top
+map + geom_point(data = crimedatatheft2018, aes(x = Longitude, y = Latitude), color = 'pink',size=2, alpha=0.3) +
+   labs(title = "Austin Crime Theft - 2018 By Month") + 
+  theme(plot.title = element_text(hjust = 0.5)) +
+  facet_wrap(~Occurred_Month, ncol = 6)
+  
+```
+
+```{r}
+#plot the  hybrid Google Maps basemap
+map <- qmap('Austin', zoom = 12, maptype = 'hybrid')
+#plot the crime points on top
+map + geom_point(data = crimedatatheft2017, aes(x = Longitude, y = Latitude), color = 'pink',size=2, alpha=0.3) +
+   labs(title = "Austin Crime Theft - 2017 By Month") + 
+  theme(plot.title = element_text(hjust = 0.5)) +
+  facet_wrap(~Occurred_Month, ncol = 6)
+```  
+
+
+```{r}
+#plot the  hybrid Google Maps basemap
+map <- qmap('Austin', zoom = 12, maptype = 'hybrid')
+#plot the crime points on top
+map + geom_point(data = crimedatatheft2016, aes(x = Longitude, y = Latitude), color = 'pink',size=2, alpha=0.3) +
+   labs(title = "Austin Crime Theft - 2016 By Month") + 
+  theme(plot.title = element_text(hjust = 0.5)) +
+  facet_wrap(~Occurred_Month, ncol = 6)
+``` 
+
+
+```{r}
+#plot the  hybrid Google Maps basemap
+map <- qmap('Austin', zoom = 12, maptype = 'hybrid')
+#plot the crime points on top
+map + geom_point(data = crimedatatheft2015, aes(x = Longitude, y = Latitude), color = 'pink',size=2, alpha=0.3) +
+   labs(title = "Austin Crime Theft - 2015 By Month") + 
+  theme(plot.title = element_text(hjust = 0.5)) +
+  facet_wrap(~Occurred_Month, ncol = 6)
+``` 
+
+
+
